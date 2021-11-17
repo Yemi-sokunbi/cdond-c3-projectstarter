@@ -44,7 +44,7 @@ jobs:
           paths: [backend/node_modules]
           key: backend-build
 
-workflow:
+workflows:
   ExecuteJobs:
     jobs:
       - build-frontend
