@@ -12,9 +12,9 @@ jobs:
           name: Install dependencies
           command: |
             cd frontend
-            npm install webpack-dev-server -g
-            npm install 
-            npm run build
+            sudo npm install webpack-dev-server -g
+            sudo npm install 
+            sudo npm run build
        
       - save_cache:
           paths: [frontend/node_modules]
