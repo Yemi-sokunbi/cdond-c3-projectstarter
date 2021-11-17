@@ -29,17 +29,17 @@ jobs:
       - restore_cache:
           keys: [backend-build]
       - run:
-        name: Build back-end
-        command:
-          npm install
-          npm start
-          npm run start:dev
-          npm run webpack
-          npm run start:hmr
-          npm run start:prod
-          npm run test
-          npm run test:e2e
-          npm run test:cov
+          name: Build back-end
+          command:
+            npm install
+            npm start
+            npm run start:dev
+            npm run webpack
+            npm run start:hmr
+            npm run start:prod
+            npm run test
+            npm run test:e2e
+            npm run test:cov
       - save_cache:
           paths: [backend/node_modules]
           key: backend-build
