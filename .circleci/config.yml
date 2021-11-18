@@ -92,7 +92,7 @@ jobs:
             cd frontend
             npm install
             # npm install oauth-sign@^0.9.0
-            npm audit --audit-level=critical
+            npm audit fix --audit-level=critical
       - save_cache:
           paths: [backend/node_modules]
           key: frontend-scan
@@ -113,13 +113,14 @@ jobs:
             cd backend
             npm install
             # npm install oauth-sign@^0.9.0
-            npm audit --audit-level=critical
+            npm audit fix --audit-level=critical
       - save_cache:
           paths: [backend/node_modules]
           key: backend-scan
       - slack/notify:
           event: fail
           template: basic_fail_1
+        
 
 workflows:
   ExecuteJobs:
