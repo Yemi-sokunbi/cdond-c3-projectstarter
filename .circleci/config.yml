@@ -1,4 +1,6 @@
 version: 2.1
+orbs:
+  slack: circleci/slack@4.1
 
 jobs:
   build-frontend:
@@ -53,6 +55,9 @@ jobs:
       - save_cache:
           paths: [frontend/node_modules]
           key: frontend-test
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
 
   test-backend:
     docker:
@@ -70,6 +75,9 @@ jobs:
       - save_cache:
           paths: [backend/node_modules]
           key: backend-test
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
             
   scan-frontend:
     docker:
@@ -84,10 +92,13 @@ jobs:
             cd frontend
             npm install
             # npm install oauth-sign@^0.9.0
-            npm audit fix --audit-level=critical
+            npm audit --audit-level=critical
       - save_cache:
           paths: [backend/node_modules]
           key: frontend-scan
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
 
   scan-backend:
     docker:
@@ -102,10 +113,13 @@ jobs:
             cd backend
             npm install
             # npm install oauth-sign@^0.9.0
-            npm audit fix --audit-level=critical
+            npm audit --audit-level=critical
       - save_cache:
           paths: [backend/node_modules]
           key: backend-scan
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
 
 workflows:
   ExecuteJobs:
