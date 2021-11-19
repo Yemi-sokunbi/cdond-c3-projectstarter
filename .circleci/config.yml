@@ -171,6 +171,145 @@ jobs:
             - project/.circleci/ansible/inventory.txt
       - destroy-environment
       
+  configure-infrastructure:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["ba:9a:67:21:b6:43:01:c6:8f:fb:a1:0e:64:3b:3e:b7"]
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Install dependencies
+          command: |
+            apk add --update ansible
+            cat ~/output.txt
+      - run:
+          name: Configure server
+          command: |
+
+            echo ENVIRONMENT=production > "backend/.env"
+            echo TYPEORM_CONNECTION=postgres >> "backend/.env"
+            echo TYPEORM_ENTITIES=./src/modules/domain/**/*.entity.ts >> "backend/.env"
+            echo TYPEORM_MIGRATIONS=./src/migrations/*.ts >> "backend/.env"
+            echo TYPEORM_MIGRATIONS_DIR=./src/migrations >> "backend/.env"
+            echo NODE_ENV=production >> "backend/.env"
+            echo TYPEORM_HOST=$TYPEORM_HOST >> "backend/.env"
+            echo TYPEORM_PORT=$TYPEORM_PORT >> "backend/.env"
+            echo TYPEORM_USERNAME=$TYPEORM_USERNAME >> "backend/.env"
+            echo TYPEORM_PASSWORD=$TYPEORM_PASSWORD >> "backend/.env"
+            echo TYPEORM_DATABASE=$TYPEORM_DATABASE >> "backend/.env"
+
+            cd .circleci/ansible
+            ansible-playbook -i inventory.txt configure-server.yml
+      - destroy-environment
+
+  run-migrations:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - aws-cli/setup
+      - restore_cache:
+          keys: ["backend-build"]
+      - run:
+          name: Run migrations
+          command: |
+            echo ENVIRONMENT=production > "backend/.env"
+            echo TYPEORM_CONNECTION=postgres >> "backend/.env"
+            echo TYPEORM_ENTITIES=./src/modules/domain/**/*.entity.ts >> "backend/.env"
+            echo TYPEORM_MIGRATIONS=./src/migrations/*.ts >> "backend/.env"
+            echo TYPEORM_MIGRATIONS_DIR=./src/migrations >> "backend/.env"
+            echo NODE_ENV=production >> "backend/.env"
+            echo TYPEORM_HOST=$TYPEORM_HOST >> "backend/.env"
+            echo TYPEORM_PORT=$TYPEORM_PORT >> "backend/.env"
+            echo TYPEORM_USERNAME=$TYPEORM_USERNAME >> "backend/.env"
+            echo TYPEORM_PASSWORD=$TYPEORM_PASSWORD >> "backend/.env"
+            echo TYPEORM_DATABASE=$TYPEORM_DATABASE >> "backend/.env"
+            
+            cd backend
+            sudo npm install
+            npm audit fix --audit-level=critical --force
+            sudo npm run build
+            sudo npm run migrations > migration_dump.txt
+            cat migration_dump.txt
+            migration_status=$(cat migration_dump | grep -c "has been executed successfully")
+            if [ $migration_status > 0 ]; then exit 0; else exit 1; fi;
+      - run:
+          name: Send migration results to memstash
+          command: |
+            curl -H "Content-Type: text/plain" \
+              -H "token: << pipeline.parameters.memstash-token >>" \
+              --request PUT --data "1" \
+              https://api.memstash.io/values/migration_${CIRCLE_WORKFLOW_ID}
+      - revert-migrations
+      - destroy-environment
+  
+  deploy-frontend:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Install dependencies
+          command: |
+            cd frontend
+            sudo npm install webpack-dev-server -g
+            sudo npm install
+      - run:
+          name: Get backend url
+          command: |
+            export BACKEND_IP=$(sed -n 2p .circleci/ansible/inventory.txt)
+            export API_URL="http://${BACKEND_IP}:3030"
+            echo ENVIRONMENT=production > "frontend/.env"
+            echo NODE_ENV=production >> "frontend/.env"
+            echo API_URL=$API_URL >> "frontend/.env"
+            echo $API_URL
+      - run:
+          name: Deploy frontend objects
+          command: |
+            cd frontend
+            npm install
+            npm run build
+            tar -czvf artifact-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
+      - revert-migrations
+      - destroy-environment      
+                    
+  deploy-backend:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["ba:9a:67:21:b6:43:01:c6:8f:fb:a1:0e:64:3b:3e:b7"]
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Install dependencies
+          command: |
+            apk add --update ansible openssh-client tar gzip 
+      - run:
+          name: Deploy backend
+          command: |
+            cd backend
+            npm i
+            npm run build
+            cd ..
+            # Zip the directory
+            tar -C backend -czvf artifact.tar.gz .
+            cd .circleci/ansible
+            echo "Contents  of the inventory.txt file is -------"
+            cat inventory.txt
+            ansible-playbook -i inventory.txt deploy-backend.yml
+      - revert-migrations
+      - destroy-environment
+
+
+     
 
 workflows:
   ExecuteJobs:
@@ -186,3 +325,6 @@ workflows:
       - scan-frontend:
           requires: [build-frontend]
       - deploy-infrastructure
+      - configure-infrastructure
+          requires: [deploy-infrastructure]
+      - run-migrations
